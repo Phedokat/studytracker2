@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Study Tracker</title>
+
+<style>
+    * {
+        box-sizing: border-box;
+    }
+
+    body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        background: #0f172a;
+        color: white;
+    }
+
+    header {
+        text-align: center;
+        padding: 15px;
+        font-size: 1.5rem;
+        color: #38bdf8;
+    }
+
+    .container {
+        padding: 15px;
+        display: grid;
+        gap: 15px;
+    }
+
+    /* Responsive grid */
+    @media (min-width: 768px) {
+        .container {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @media (min-width: 1024px) {
+        .container {
+            grid-template-columns: repeat(3, 1fr);
+        }
+    }
+
+    .card {
+        background: #1e293b;
+        padding: 15px;
+        border-radius: 12px;
+        width: 100%;
+    }
+
+    h3 {
+        margin-top: 0;
+    }
+
+    input, button {
+        width: 100%;
+        padding: 12px;
+        margin-top: 8px;
+        border-radius: 8px;
+        border: none;
+        font-size: 1rem;
+    }
+
+    input {
+        background: #334155;
+        color: white;
+    }
+
+    button {
+        background: #38bdf8;
+        color: black;
+        font-weight: bold;
+        cursor: pointer;
+    }
+
+    button:hover {
+        opacity: 0.9;
+    }
+
+    .bar {
+        height: 10px;
+        background: #38bdf8;
+        margin: 4px 0;
+        border-radius: 5px;
+    }
+
+    p {
+        margin: 6px 0;
+    }
+</style>
+</head>
+
+<body>
+
+<header>Study Tracker</header>
+
+<div class="container">
+
+    <!-- INPUT -->
+    <div class="card">
+        <h3>Log Study Session</h3>
+        <input id="subject" placeholder="Subject">
+        <input id="hours" type="number" placeholder="Hours">
+        <input id="score" type="number" placeholder="Score %">
+        <button onclick="addEntry()">Add Session</button>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div class="card">
+        <h3>Dashboard</h3>
+        <p id="weekRange"></p>
+        <p id="totalHours"></p>
+        <p id="sessions"></p>
+        <p id="streak"></p>
+        <div id="averages"></div>
+    </div>
+
+    <!-- TRENDS -->
+    <div class="card">
+        <h3>Trends (Last 5 Scores)</h3>
+        <div id="trends"></div>
+    </div>
+
+</div>
+
+<script>
+let data = JSON.parse(localStorage.getItem("studyData")) || [];
+
+function saveData() {
+    localStorage.setItem("studyData", JSON.stringify(data));
+}
+
+function getWeekRange() {
+    const now = new Date();
+    const day = now.getDay();
+
+    const start = new Date(now);
+    start.setDate(now.getDate() - day);
+
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+
+    const format = (d) =>
+        d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+    return `${format(start)} - ${format(end)}`;
+}
+
+function addEntry() {
+    const subject = document.getElementById("subject").value.trim();
+    const hours = Number(document.getElementById("hours").value);
+    const score = Number(document.getElementById("score").value);
+
+    if (!subject || hours <= 0 || score < 0) {
+        alert("Please fill all fields correctly");
+        return;
+    }
+
+    data.push({
+        subject,
+        hours,
+        score,
+        date: new Date().toISOString().split("T")[0]
+    });
+
+    saveData();
+    updateDashboard();
+
+    document.getElementById("subject").value = "";
+    document.getElementById("hours").value = "";
+    document.getElementById("score").value = "";
+}
+
+function updateDashboard() {
+    const now = new Date();
+
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay());
+
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+
+    let totalHours = 0;
+    let subjectStats = {};
+    let dates = new Set();
+
+    data.forEach(entry => {
+        const entryDate = new Date(entry.date);
+
+        if (entryDate >= startOfWeek && entryDate <= endOfWeek) {
+            totalHours += entry.hours;
+        }
+
+        dates.add(entry.date);
+
+        if (!subjectStats[entry.subject]) {
+            subjectStats[entry.subject] = {
+                total: 0,
+                count: 0,
+                scores: []
+            };
+        }
+
+        subjectStats[entry.subject].total += entry.score;
+        subjectStats[entry.subject].count++;
+        subjectStats[entry.subject].scores.push(entry.score);
+    });
+
+    document.getElementById("weekRange").innerText =
+        "Week: " + getWeekRange();
+
+    document.getElementById("totalHours").innerText =
+        "Hours this week: " + totalHours;
+
+    document.getElementById("sessions").innerText =
+        "Total sessions: " + data.length;
+
+    let avgHTML = "<h4>Average Scores</h4>";
+    for (let sub in subjectStats) {
+        let avg = (subjectStats[sub].total / subjectStats[sub].count).toFixed(1);
+        avgHTML += `<p>${sub}: ${avg}%</p>`;
+    }
+    document.getElementById("averages").innerHTML = avgHTML;
+
+    let trendHTML = "";
+    for (let sub in subjectStats) {
+        trendHTML += `<h4>${sub}</h4>`;
+        let last5 = subjectStats[sub].scores.slice(-5);
+        last5.forEach(score => {
+            trendHTML += `<div class="bar" style="width:${score}%"></div>`;
+        });
+    }
+    document.getElementById("trends").innerHTML = trendHTML;
+
+    let sortedDates = Array.from(dates).sort().reverse();
+    let streak = 0;
+    let current = new Date();
+
+    for (let d of sortedDates) {
+        let entryDate = new Date(d);
+        let diff = (current - entryDate) / (1000 * 60 * 60 * 24);
+
+        if (diff < 1.5) {
+            streak++;
+            current = entryDate;
+        } else {
+            break;
+        }
+    }
+
+    document.getElementById("streak").innerText =
+        "Streak: " + streak + " days";
+}
+
+updateDashboard();
+</script>
+
+</body>
+</html>
